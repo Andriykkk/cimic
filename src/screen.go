@@ -6,28 +6,31 @@ import (
 	"math"
 	"sync"
 
+	"github.com/AllenDang/giu"
 	"github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/AllenDang/giu"
 )
 
 func onClickMe() {
-        fmt.Println("Hello world!")
+	fmt.Println("Hello world!")
 }
 
 func onImSoCute() {
-        fmt.Println("Im sooooooo cute!!")
+	cameraSpeed := float32(cameraSpeed) * deltaTime
+
+	cameraPos = cameraPos.Add(cameraFront.Mul(cameraSpeed))
+	fmt.Println("Im sooooooo cute!!")
 }
 
 func loop() {
-        giu.SingleWindow().Layout(
-                giu.Label("Hello world from giu"),
-                giu.Row(
-                        giu.Button("Click Me").OnClick(onClickMe),
-                        giu.Button("I'm so cute").OnClick(onImSoCute),
-                ),
-        )
+	giu.SingleWindow().Layout(
+		giu.Label("Hello world from giu"),
+		giu.Row(
+			giu.Button("Click Me").OnClick(onClickMe),
+			giu.Button("I'm so cute").OnClick(onImSoCute),
+		),
+	)
 }
 
 func createShaderProgram(vertexSource, fragmentSource string) uint32 {
@@ -75,9 +78,23 @@ func initWindow(vertices []Vertex, faces []Face) {
 		log.Fatalln("failed to create window:", err)
 	}
 	window.MakeContextCurrent()
-	window.SetKeyCallback(keyCallback)
+	window.SetInputMode(glfw.CursorMode, glfw.CursorNormal)
+	window.SetKeyCallback(func(window *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
+		if key == glfw.KeyLeftControl || key == glfw.KeyRightControl {
+			if action == glfw.Press {
+				window.SetInputMode(glfw.CursorMode, glfw.CursorDisabled)
+				lastX, lastY = window.GetCursorPos()
+			} else if action == glfw.Release {
+				window.SetInputMode(glfw.CursorMode, glfw.CursorNormal)
+			}
+		}
+
+		if key == glfw.KeyEscape && action == glfw.Press {
+			window.SetShouldClose(true)
+		}
+	})
 	window.SetCursorPosCallback(mouseCallback)
-	window.SetInputMode(glfw.CursorMode, glfw.CursorDisabled)
+	window.SetInputMode(glfw.CursorMode, glfw.CursorNormal)
 
 	if err := gl.Init(); err != nil {
 		log.Fatalln("failed to initialize OpenGL:", err)
@@ -136,7 +153,7 @@ func initWindow(vertices []Vertex, faces []Face) {
 	wireframeShaderProgram := createShaderProgram(vertexShaderSource, wireframeFragmentShaderSource)
 	setUniforms(wireframeShaderProgram)
 
-	gl.Enable(gl.DEPTH_TEST) 
+	gl.Enable(gl.DEPTH_TEST)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -146,7 +163,7 @@ func initWindow(vertices []Vertex, faces []Face) {
 		wnd.Run(loop)
 	}()
 
-	for !window.ShouldClose() { 
+	for !window.ShouldClose() {
 		currentFrame := float32(glfw.GetTime())
 		deltaTime = currentFrame - lastFrame
 		lastFrame = currentFrame
@@ -183,13 +200,8 @@ func initWindow(vertices []Vertex, faces []Face) {
 		window.SwapBuffers()
 		glfw.PollEvents()
 	}
-}
 
-
-func keyCallback(w *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
-	if key == glfw.KeyEscape && action == glfw.Press {
-		w.SetShouldClose(true)
-	}
+	wg.Wait()
 }
 
 func compileShader(source string, shaderType uint32) (uint32, error) {
@@ -213,28 +225,30 @@ func compileShader(source string, shaderType uint32) (uint32, error) {
 }
 
 func mouseCallback(window *glfw.Window, xpos, ypos float64) {
-	if firstMouse {
+	if window.GetInputMode(glfw.CursorMode) == glfw.CursorDisabled {
+		if firstMouse {
+			lastX = xpos
+			lastY = ypos
+			firstMouse = false
+		}
+
+		xoffset := xpos - lastX
+		yoffset := lastY - ypos
 		lastX = xpos
 		lastY = ypos
-		firstMouse = false
-	}
 
-	xoffset := xpos - lastX
-	yoffset := lastY - ypos
-	lastX = xpos
-	lastY = ypos
+		xoffset *= sensitivity
+		yoffset *= sensitivity
 
-	xoffset *= sensitivity
-	yoffset *= sensitivity
+		yaw += xoffset
+		pitch += yoffset
 
-	yaw += xoffset
-	pitch += yoffset
-
-	if pitch > 89.0 {
-		pitch = 89.0
-	}
-	if pitch < -89.0 {
-		pitch = -89.0
+		if pitch > 89.0 {
+			pitch = 89.0
+		}
+		if pitch < -89.0 {
+			pitch = -89.0
+		}
 	}
 }
 
