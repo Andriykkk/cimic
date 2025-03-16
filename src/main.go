@@ -16,6 +16,11 @@ var (
 	cameraFront = mgl32.Vec3{0.0, 0.0, -1.0}
 	cameraUp    = mgl32.Vec3{0.0, 1.0, 0.0}
 
+	cameraSpeed = float32(250.0)
+
+	nearClipping = 0.1
+	farClipping  = 10000.0
+
 	deltaTime = float32(0.0)
 	lastFrame = float32(0.0)
 

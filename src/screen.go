@@ -84,7 +84,7 @@ func initWindow(vertices []Vertex, faces []Face) {
 	gl.DeleteShader(vertexShader)
 	gl.DeleteShader(fragmentShader)
 
-	projection := mgl32.Perspective(mgl32.DegToRad(45.0), float32(windowWidth)/windowHeight, 0.1, 10000.0)
+	projection := mgl32.Perspective(mgl32.DegToRad(45.0), float32(windowWidth)/windowHeight, float32(nearClipping), float32(farClipping))
 	projectionUniform := gl.GetUniformLocation(shaderProgram, gl.Str("projection\x00"))
 	gl.UniformMatrix4fv(projectionUniform, 1, false, &projection[0])
 
@@ -174,7 +174,7 @@ func mouseCallback(window *glfw.Window, xpos, ypos float64) {
 }
 
 func processInput(window *glfw.Window) {
-	cameraSpeed := float32(250) * deltaTime
+	cameraSpeed := float32(cameraSpeed) * deltaTime
 
 	if window.GetKey(glfw.KeyW) == glfw.Press {
 		cameraPos = cameraPos.Add(cameraFront.Mul(cameraSpeed))
