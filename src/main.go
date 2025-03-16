@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"fmt"
+	"math"
 	"runtime"
 
 	"github.com/go-gl/gl/v4.1-core/gl"
@@ -28,6 +29,12 @@ var (
 
 	deltaTime = float32(0.0)
 	lastFrame = float32(0.0)
+
+	lastX, lastY = float64(windowWidth) / 2, float64(windowHeight) / 2
+	firstMouse = true
+	yaw = -90.0
+	pitch = 0.0
+	sensitivity = 0.1
 ) 
 
 func init() {
@@ -48,6 +55,8 @@ func main() {
 	}
 	window.MakeContextCurrent()
 	window.SetKeyCallback(keyCallback)
+	window.SetCursorPosCallback(mouseCallback)
+	window.SetInputMode(glfw.CursorMode, glfw.CursorDisabled)
 
 	if err := gl.Init(); err != nil {
 		log.Fatalln("failed to initialize OpenGL:", err)
@@ -122,6 +131,12 @@ func main() {
 		gl.ClearColor(0.0, 0.0, 0.0, 1.0)
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
+		cameraFront = mgl32.Vec3{
+			float32(math.Cos(float64(mgl32.DegToRad(float32(yaw)))) * math.Cos(float64(mgl32.DegToRad(float32(pitch))))),
+			float32(math.Sin(float64(mgl32.DegToRad(float32(pitch))))),
+			float32(math.Sin(float64(mgl32.DegToRad(float32(yaw)))) * math.Cos(float64(mgl32.DegToRad(float32(pitch))))),
+		}.Normalize()
+
 		view := mgl32.LookAtV(cameraPos, cameraPos.Add(cameraFront), cameraUp)
 		viewUniform := gl.GetUniformLocation(shaderProgram, gl.Str("view\x00"))
 		gl.UniformMatrix4fv(viewUniform, 1, false, &view[0])
@@ -159,6 +174,32 @@ func compileShader(source string, shaderType uint32) (uint32, error) {
 	}
 
 	return shader, nil
+}
+
+func mouseCallback(window *glfw.Window, xpos, ypos float64) {
+	if firstMouse {
+		lastX = xpos
+		lastY = ypos
+		firstMouse = false
+	}
+
+	xoffset := xpos - lastX
+	yoffset := lastY - ypos
+	lastX = xpos
+	lastY = ypos
+
+	xoffset *= sensitivity
+	yoffset *= sensitivity
+
+	yaw += xoffset
+	pitch += yoffset
+
+	if pitch > 89.0 {
+		pitch = 89.0
+	}
+	if pitch < -89.0 {
+		pitch = -89.0
+	}
 }
 
 func processInput(window *glfw.Window) {
