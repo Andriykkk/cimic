@@ -20,6 +20,7 @@ var (
 
 	nearClipping = 0.1
 	farClipping  = 10000.0
+	
 
 	deltaTime = float32(0.0)
 	lastFrame = float32(0.0)

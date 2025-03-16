@@ -4,11 +4,63 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"sync"
 
 	"github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/go-gl/mathgl/mgl32"
+	"github.com/AllenDang/giu"
 )
+
+func onClickMe() {
+        fmt.Println("Hello world!")
+}
+
+func onImSoCute() {
+        fmt.Println("Im sooooooo cute!!")
+}
+
+func loop() {
+        giu.SingleWindow().Layout(
+                giu.Label("Hello world from giu"),
+                giu.Row(
+                        giu.Button("Click Me").OnClick(onClickMe),
+                        giu.Button("I'm so cute").OnClick(onImSoCute),
+                ),
+        )
+}
+
+func createShaderProgram(vertexSource, fragmentSource string) uint32 {
+	vertexShader, err := compileShader(vertexSource, gl.VERTEX_SHADER)
+	if err != nil {
+		log.Fatalln("failed to compile vertex shader:", err)
+	}
+	fragmentShader, err := compileShader(fragmentSource, gl.FRAGMENT_SHADER)
+	if err != nil {
+		log.Fatalln("failed to compile fragment shader:", err)
+	}
+
+	shaderProgram := gl.CreateProgram()
+	gl.AttachShader(shaderProgram, vertexShader)
+	gl.AttachShader(shaderProgram, fragmentShader)
+	gl.LinkProgram(shaderProgram)
+	gl.UseProgram(shaderProgram)
+
+	gl.DeleteShader(vertexShader)
+	gl.DeleteShader(fragmentShader)
+
+	return shaderProgram
+}
+
+func setUniforms(shaderProgram uint32) {
+	projection := mgl32.Perspective(mgl32.DegToRad(45.0), float32(windowWidth)/windowHeight, float32(nearClipping), float32(farClipping))
+	projectionUniform := gl.GetUniformLocation(shaderProgram, gl.Str("projection\x00"))
+	gl.UniformMatrix4fv(projectionUniform, 1, false, &projection[0])
+
+	model := mgl32.Ident4()
+	modelUniform := gl.GetUniformLocation(shaderProgram, gl.Str("model\x00"))
+	gl.UniformMatrix4fv(modelUniform, 1, false, &model[0])
+}
 
 func initWindow(vertices []Vertex, faces []Face) {
 	if err := glfw.Init(); err != nil {
@@ -47,6 +99,8 @@ func initWindow(vertices []Vertex, faces []Face) {
 	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, 3*4, gl.PtrOffset(0))
 	gl.EnableVertexAttribArray(0)
 
+	// shadow
+
 	vertexShaderSource := `
 		#version 410
 		layout (location = 0) in vec3 aPos;
@@ -66,33 +120,33 @@ func initWindow(vertices []Vertex, faces []Face) {
 	}
 	` + "\x00"
 
-	vertexShader, err := compileShader(vertexShaderSource, gl.VERTEX_SHADER)
-	if err != nil {
-		log.Fatalln("failed to compile vertex shader:", err)
+	wireframeFragmentShaderSource := `
+	#version 410
+	out vec4 FragColor;
+	void main() {
+		FragColor = vec4(0.0f, 0.0f, 0.0f, 0.0f);
 	}
-	fragmentShader, err := compileShader(fragmentShaderSource, gl.FRAGMENT_SHADER)
-	if err != nil {
-		log.Fatalln("failed to compile fragment shader:", err)
-	}
+	` + "\x00"
 
-	shaderProgram := gl.CreateProgram()
-	gl.AttachShader(shaderProgram, vertexShader)
-	gl.AttachShader(shaderProgram, fragmentShader)
-	gl.LinkProgram(shaderProgram)
-	gl.UseProgram(shaderProgram)
+	// create white triangles
+	shaderProgram := createShaderProgram(vertexShaderSource, fragmentShaderSource)
+	setUniforms(shaderProgram)
 
-	gl.DeleteShader(vertexShader)
-	gl.DeleteShader(fragmentShader)
+	// create wireframe
+	wireframeShaderProgram := createShaderProgram(vertexShaderSource, wireframeFragmentShaderSource)
+	setUniforms(wireframeShaderProgram)
 
-	projection := mgl32.Perspective(mgl32.DegToRad(45.0), float32(windowWidth)/windowHeight, float32(nearClipping), float32(farClipping))
-	projectionUniform := gl.GetUniformLocation(shaderProgram, gl.Str("projection\x00"))
-	gl.UniformMatrix4fv(projectionUniform, 1, false, &projection[0])
+	gl.Enable(gl.DEPTH_TEST) 
 
-	model := mgl32.Ident4()
-	modelUniform := gl.GetUniformLocation(shaderProgram, gl.Str("model\x00"))
-	gl.UniformMatrix4fv(modelUniform, 1, false, &model[0])
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		wnd := giu.NewMasterWindow("Hello world", 400, 200, giu.MasterWindowFlagsNotResizable)
+		wnd.Run(loop)
+	}()
 
-	for !window.ShouldClose() {
+	for !window.ShouldClose() { 
 		currentFrame := float32(glfw.GetTime())
 		deltaTime = currentFrame - lastFrame
 		lastFrame = currentFrame
@@ -109,17 +163,28 @@ func initWindow(vertices []Vertex, faces []Face) {
 		}.Normalize()
 
 		view := mgl32.LookAtV(cameraPos, cameraPos.Add(cameraFront), cameraUp)
+
+		// Render solid triangles
+		gl.UseProgram(shaderProgram)
 		viewUniform := gl.GetUniformLocation(shaderProgram, gl.Str("view\x00"))
 		gl.UniformMatrix4fv(viewUniform, 1, false, &view[0])
-
 		gl.BindVertexArray(VAO)
 		gl.DrawArrays(gl.TRIANGLES, 0, int32(len(glData)/3))
 
-		window.SwapBuffers()
+		// Render wireframe triangles
+		gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
+		gl.LineWidth(2.0)
+		gl.UseProgram(wireframeShaderProgram)
+		wireframeViewUniform := gl.GetUniformLocation(wireframeShaderProgram, gl.Str("view\x00"))
+		gl.UniformMatrix4fv(wireframeViewUniform, 1, false, &view[0])
+		gl.DrawArrays(gl.TRIANGLES, 0, int32(len(glData)/3))
+		gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
 
+		window.SwapBuffers()
 		glfw.PollEvents()
 	}
 }
+
 
 func keyCallback(w *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
 	if key == glfw.KeyEscape && action == glfw.Press {
